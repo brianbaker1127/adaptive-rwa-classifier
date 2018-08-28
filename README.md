@@ -16,6 +16,3 @@ for each iteration.
 5) initialize a driven open system object: driven_open_system = DrivenOpenSystem(H_system, decoherence_rates, drive_coupling, drive_frequency). 
 6) solve for the steady-state solution: solution = driven_open_system.recursive_steadystate_solve(v_min, it_max). v_min is a lower bound cutoff matrix element size for V that solver considers (default is 0). it_max is maximum number of iterations solver will loop through (default is 10). 
 
-The secondary tool is also a master equation solver that solves the Lindblad ME exactly. This is a standard numerical
-differential equation solver. The solution is automatically time averaged.
-

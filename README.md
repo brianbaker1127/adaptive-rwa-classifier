@@ -1,4 +1,4 @@
-# Steady-State-Project
+# Adaptive-RWA Solver
 The steady state recursion module contains tools necessary to describe the dynamics of an open, driven system.
 
 ## requirements: installation of qutip (http://qutip.org/docs/4.1/installation.html)

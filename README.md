@@ -1,9 +1,8 @@
 # Adaptive-RWA Solver
-The adaptiveRWA_solver.py module contains tools necessary to describe the dynamics of an open, driven system.
 
 ## requirements: installation of qutip (http://qutip.org/docs/4.1/installation.html)
 
-The primary tool is a master equation solver that approximates the solution to the Lindblad master equation with
+The adaptive-rwa solver is a master equation solver that approximates the solution to the Lindblad master equation with
 a steady-state solution. The steady-state is determined via our "adaptive rotating wave approximation", where irrelevant drive
 terms have been neglected. It is an iterative perturbative algorithm, which involves solving a set of inhomogeneous linear equations
 for each iteration.

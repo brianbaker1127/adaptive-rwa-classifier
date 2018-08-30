@@ -47,10 +47,8 @@ class DrivenOpenSystem:
         self.dim = self.hamiltonian.shape[0]
         self.gamma_table = decoherence_rates
         self.omega = angular_frequency
-        eigensystem = self.hamiltonian.eigenstates()
-        self.evecs = eigensystem[1]
-        self.evals = eigensystem[0]
-
+        self.evals, self.evecs = self.hamiltonian.eigenstates()
+       
         self.jump_ops = self.jump_operators(self.gamma_table)
         # This initial steady-state is the thermal equilibrium state (bootstrapping)
         self.rho_s = qt.steadystate(self.hamiltonian, self.jump_ops)
@@ -76,7 +74,7 @@ class DrivenOpenSystem:
         iteration_count = 0
         while iteration_count <= it_max:
             
-            self.rotating_frame_hamiltonian, self.integer_list, new_drive_term_list, neglected_term_list, error_measure = self.determine_frame(cutoff_matrix_element)
+            self.rotating_frame_hamiltonian, self.integer_list, new_drive_term_list, neglected_term_list, error_parameter = self.determine_frame(cutoff_matrix_element)
            
             if new_drive_term_list == self.drive_term_list:
                 break
@@ -93,7 +91,7 @@ class DrivenOpenSystem:
                 warnings.warn("maximum iteration count exceeded")
 
         if neglected_term_info:
-            return self.rho_s, neglected_term_list, error_measure
+            return self.rho_s, neglected_term_list, error_parameter
         else:
             return self.rho_s   
 
@@ -116,7 +114,8 @@ class DrivenOpenSystem:
 
     def determine_frame(self, cutoff_matrix_element):
         """Construct a rotating frame transformation with corresponding integers, Hamiltonian, and drive terms
-           returns: rotating frame Hamiltonian, h; list of chosen integers; list of chosen drive terms; list of neglected terms; error measure
+           returns: rotating frame Hamiltonian, h; list of chosen integers; list of chosen drive terms; list of neglected terms; error parameter
+           @param cutoff_matrix_element: (float) smallest matrix element size desired to be considered in determing drive term relevance
         """
      
         evecs = self.evecs
@@ -130,7 +129,7 @@ class DrivenOpenSystem:
             h_bare += (evals[j])*(evecs[j]*evecs[j].dag()) - self.omega * integers[j]*(evecs[j]*evecs[j].dag())
  
         h_drive = 0
-        error = 0
+        error_parameter = 0
         number_of_transitions = int(self.dim*(self.dim-1)/2)
         drive_terms = []
         neglected_terms = []
@@ -143,67 +142,72 @@ class DrivenOpenSystem:
                     drive_terms.append(evecs[min(index)]*evecs[max(index)].dag()*(evecs[min(index)].dag()*(v*evecs[max(index)])))
                 else:
                     neglected_terms.append(evecs[min(index)]*evecs[max(index)].dag()*(evecs[min(index)].dag()*(v*evecs[max(index)])))
-                    error += ranking[j][0]**2
+                    error_parameter += ranking[j][0]**2
             else:
                 break
-        error = np.sqrt(error)
+        error_parameter = np.sqrt(error_parameter)
 
-        return h_bare + h_drive + h_drive.dag(), integers, drive_terms, neglected_terms, error
+        return h_bare + h_drive + h_drive.dag(), integers, drive_terms, neglected_terms, error_parameter
 
     
     
     def rank_and_assign(self, cutoff_matrix_element):
-        """rank individual drive terms based on their calculated relevence parameter and assign integers"""
+        """rank individual drive terms based on their calculated relevence parameter and assign integers
+           returns: transition_rank, a list containing (in order of decreasing relevance) all relevance parameters for each term and the indices of each term.
+                    integers, a list containing the integer assigned for each state
+           @param cutoff_matrix_element: (float) smallest matrix element size desired to be considered in determing drive term relevance
+        """
 
         L0 = (qt.liouvillian(self.rotating_frame_hamiltonian, self.jump_ops))
         
-        R = [[self.calculate_first_order_correction(cutoff_matrix_element, n, m, L0) for m in range(self.dim)] for n in range(self.dim)]
-        R = np.asarray(R)
+        Relevance = [[self.calculate_first_order_correction(cutoff_matrix_element, n, m, L0) for m in range(self.dim)] for n in range(self.dim)]
+        Relevance = np.asarray(Relevance)
         
         number_of_transitions = int(self.dim*(self.dim-1)/2)
-        transition_rank = [[] for i in range(number_of_transitions)]
+        transition_rank = [None for i in range(number_of_transitions)]
         rank = 0
+        # This loop ranks drive terms according to relevance 
         for i in range(number_of_transitions):
-            R_max = np.where(R == R.max())
-            indices = [R_max[0][0], R_max[1][0]]
-            transition_rank[rank] = [R.max(), indices]
-            R[indices[0]][indices[1]] = R[indices[1]][indices[0]] = 0
+            max_ranked_indices = np.where(Relevance == Relevance.max())
+            indices = [max_ranked_indices[0][0], max_ranked_indices[1][0]]
+            transition_rank[rank] = [Relevance.max(), indices]
+            Relevance[indices[0]][indices[1]] = Relevance[indices[1]][indices[0]] = 0
             rank += 1
         
         # This graphical algorithm assigns an integer to each eigenstate of the Hamiltonian based on the ranking from above
-        integers = [[] for i in range(self.dim)]
+        integer_list = [None for i in range(self.dim)]
         # START ALGORITHM
             # initialize first term into a graph
         first_index = transition_rank[0][1]
         graph_list = [[first_index[0],first_index[1]]]
-        integers[max(first_index)] = 1
-        integers[min(first_index)] = 0
+        integer_list[max(first_index)] = 1
+        integer_list[min(first_index)] = 0
             # assign subsequent terms
         for i in range(1,number_of_transitions):
             
-            if transition_rank[i]==[] or transition_rank[i][1] ==[0,0]:
+            if transition_rank[i]==None or transition_rank[i][1] ==[0,0]:
                 break
             else:
                 index = transition_rank[i][1]
-                if integers[index[0]]==integers[index[1]]==[]: 
-                    integers[max(index)] = 1
-                    integers[min(index)] = 0
+                if integer_list[index[0]]==integer_list[index[1]]==None: 
+                    integer_list[max(index)] = 1
+                    integer_list[min(index)] = 0
                     # creates a new graph
                     graph_list.append([index[0],index[1]])
-                elif integers[index[0]]==[]:
+                elif integer_list[index[0]]==None:
                     if index[0] > index[1]:
-                        integers[index[0]] = integers[index[1]] + 1
+                        integer_list[index[0]] = integer_list[index[1]] + 1
                     else:
-                        integers[index[0]] = integers[index[1]] - 1
+                        integer_list[index[0]] = integer_list[index[1]] - 1
                     for k,graph in enumerate(graph_list):
                         if index[1] in graph:
                             graph_list[k].append(index[0]) # place in same graph
                             break
-                elif integers[index[1]]==[]:
+                elif integer_list[index[1]]==None:
                     if index[0] > index[1]:
-                        integers[index[1]] = integers[index[0]] - 1
+                        integer_list[index[1]] = integer_list[index[0]] - 1
                     else:
-                        integers[index[1]] = integers[index[0]] + 1
+                        integer_list[index[1]] = integer_list[index[0]] + 1
                     for k,graph in enumerate(graph_list):
                         if index[0] in graph:
                             graph_list[k].append(index[1]) # place in same graph
@@ -217,17 +221,17 @@ class DrivenOpenSystem:
                         elif (len(overlap) == 1):
                             fixed_index = overlap[0]
                             shift_index = list(set(index) - set(graph))[0]
-                            old_integer = integers[shift_index]
+                            old_integer = integer_list[shift_index]
                             if shift_index > fixed_index:
-                                new_integer = integers[fixed_index] + 1
+                                new_integer = integer_list[fixed_index] + 1
                             else:
-                                new_integer = integers[fixed_index] - 1
+                                new_integer = integer_list[fixed_index] - 1
                             shift_amount = new_integer - old_integer
                             # shift the whole graph
                             for j,graph2 in enumerate(graph_list):
                                 if shift_index in graph2:
                                     for m,index2 in enumerate(graph2):
-                                        integers[index2] = integers[index2] + shift_amount
+                                        integer_list[index2] = integer_list[index2] + shift_amount
                                     graph_list[k] = graph_list[k] + graph2
                                     graph_list.pop(j)
                                     break
@@ -236,12 +240,12 @@ class DrivenOpenSystem:
                             continue
                     continue
         # Just in case, if a state was not assigned an integer due to not participating in dynamics, set its integer to 0
-        if [] in integers:
-            for i,integer in enumerate(integers):
-                if integer == []:
-                    integers[i] = 0
+        if None in integer_list:
+            for i,integer in enumerate(integer_list):
+                if integer == None:
+                    integer_list[i] = 0
         ## END algorithm
-        return transition_rank, integers
+        return transition_rank, integer_list
 
     def calculate_first_order_correction(self, cutoff_matrix_element, n, m, L0):
         """Calculates the first order correction to the steady-state density matrix due to drive term,

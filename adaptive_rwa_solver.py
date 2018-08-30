@@ -160,48 +160,50 @@ class DrivenOpenSystem:
 
         L0 = (qt.liouvillian(self.rotating_frame_hamiltonian, self.jump_ops))
         
-        Relevance = [[self.calculate_first_order_correction(cutoff_matrix_element, n, m, L0) for m in range(self.dim)] for n in range(self.dim)]
-        Relevance = np.asarray(Relevance)
+        relevance_table = [[self.calculate_first_order_correction(cutoff_matrix_element, n, m, L0) for m in range(self.dim)] for n in range(self.dim)]
+        relevance_table = np.asarray(relevance_table)
         
         number_of_transitions = int(self.dim*(self.dim-1)/2)
         transition_rank = [None for i in range(number_of_transitions)]
-        rank = 0
         # This loop ranks drive terms according to relevance 
-        for i in range(number_of_transitions):
-            max_ranked_indices = np.where(Relevance == Relevance.max())
+        for rank in range(number_of_transitions):
+            max_ranked_indices = np.where(relevance_table == relevance_table.max())
             indices = [max_ranked_indices[0][0], max_ranked_indices[1][0]]
-            transition_rank[rank] = [Relevance.max(), indices]
-            Relevance[indices[0]][indices[1]] = Relevance[indices[1]][indices[0]] = 0
-            rank += 1
+            transition_rank[rank] = [relevance_table.max(), indices]
+            relevance_table[indices[0]][indices[1]] = relevance_table[indices[1]][indices[0]] = 0
         
         # This graphical algorithm assigns an integer to each eigenstate of the Hamiltonian based on the ranking from above
         integer_list = [None for i in range(self.dim)]
         # START ALGORITHM
-            # initialize first term into a graph
+        # initialize first term into a graph
         first_index = transition_rank[0][1]
         graph_list = [[first_index[0],first_index[1]]]
         integer_list[max(first_index)] = 1
         integer_list[min(first_index)] = 0
-            # assign subsequent terms
+        # assign subsequent terms
         for i in range(1,number_of_transitions):
-            
-            if transition_rank[i]==None or transition_rank[i][1] ==[0,0]:
+            # if no more non-zero terms to consider, then break   
+            if transition_rank[i][1] ==[0,0]:
                 break
             else:
                 index = transition_rank[i][1]
+                # scenario (i) neither states have been incorporated into the graph 
                 if integer_list[index[0]]==integer_list[index[1]]==None: 
                     integer_list[max(index)] = 1
                     integer_list[min(index)] = 0
-                    # creates a new graph
+                    # place them in a new graph
                     graph_list.append([index[0],index[1]])
+                # scenario (ii) one of the states has been incorporated, but not the other
                 elif integer_list[index[0]]==None:
                     if index[0] > index[1]:
                         integer_list[index[0]] = integer_list[index[1]] + 1
                     else:
                         integer_list[index[0]] = integer_list[index[1]] - 1
+                    # find which graph component to put the state in (the component the other state is in)
                     for k,graph in enumerate(graph_list):
                         if index[1] in graph:
-                            graph_list[k].append(index[0]) # place in same graph
+                            # place that state in that graph component
+                            graph_list[k].append(index[0]) 
                             break
                 elif integer_list[index[1]]==None:
                     if index[0] > index[1]:
@@ -210,14 +212,17 @@ class DrivenOpenSystem:
                         integer_list[index[1]] = integer_list[index[0]] + 1
                     for k,graph in enumerate(graph_list):
                         if index[0] in graph:
-                            graph_list[k].append(index[1]) # place in same graph
+                            graph_list[k].append(index[1])
                             break
+                # scenario (iii) both states have already been incorporated in the graph
                 else:
+                    # find the graph components where these states have been placed
                     for k,graph in enumerate(graph_list):
                         overlap = list(set(index) & set(graph))
+                        # subscenario: the states are in the same graph component, hence a cycle so nothing can do
                         if (len(overlap) == 2):
-                            # loop closure: can't do anything
                             break
+                        # subscenario: the states are in two disjoint graph components
                         elif (len(overlap) == 1):
                             fixed_index = overlap[0]
                             shift_index = list(set(index) - set(graph))[0]
@@ -227,7 +232,7 @@ class DrivenOpenSystem:
                             else:
                                 new_integer = integer_list[fixed_index] - 1
                             shift_amount = new_integer - old_integer
-                            # shift the whole graph
+                            # merge one graph component into the other
                             for j,graph2 in enumerate(graph_list):
                                 if shift_index in graph2:
                                     for m,index2 in enumerate(graph2):
@@ -240,10 +245,9 @@ class DrivenOpenSystem:
                             continue
                     continue
         # Just in case, if a state was not assigned an integer due to not participating in dynamics, set its integer to 0
-        if None in integer_list:
-            for i,integer in enumerate(integer_list):
-                if integer == None:
-                    integer_list[i] = 0
+        for i,integer in enumerate(integer_list):
+            if integer == None:
+                integer_list[i] = 0
         ## END algorithm
         return transition_rank, integer_list
 

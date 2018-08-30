@@ -13,7 +13,7 @@ from __future__ import print_function
 
 import matplotlib.pyplot as plt
 import numpy as np
-import qutip as qt ## Import only qutip packages
+import qutip as qt ## Import qutip packages
 
 import multiprocessing as mp
 import time

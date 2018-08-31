@@ -182,8 +182,8 @@ class DrivenOpenSystem:
         integer_list[min(first_index)] = 0
         # assign subsequent terms
         for i in range(1,number_of_transitions):
-            # if no more non-zero terms to consider, then break   
-            if transition_rank[i][1] ==[0,0]:
+            # if no more non-zero relevance parameters, then break  
+            if transition_rank[i][0] == 0.0:
                 break
             else:
                 index = transition_rank[i][1]

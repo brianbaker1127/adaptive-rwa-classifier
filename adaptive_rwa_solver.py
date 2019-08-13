@@ -26,17 +26,17 @@ from functools import partial
 
 
 
-class DrivenOpenSystem:
+class DrivenOpenSystem(object):
     """Class for an open quantum system subject to a sinusoidal drive tone. Bare system Hamiltonian and drive Hamiltonian are both
        of type QObj.
        Expected parameters:
             hamiltonian: (QObj) system Hamiltonian
-            decoherence_rates: (array or list) of system decoherence rates 
+            jump_operators: (list) of system collapse operators that are input into the master equation 
             drive_hamiltonian: (QObj) drive Hamiltonian that couples to external sinusoidal field
             angular_frequency: (float) frequency of modulation
 
     """
-    def __init__(self, hamiltonian, decoherence_rates, drive_hamiltonian, angular_frequency):
+    def __init__(self, hamiltonian, jump_operators, drive_hamiltonian, angular_frequency):
 
         if isinstance(hamiltonian, qt.Qobj) and isinstance(drive_hamiltonian, qt.Qobj):
             self.hamiltonian = hamiltonian
@@ -45,11 +45,10 @@ class DrivenOpenSystem:
             raise TypeError("The system Hamiltonian and drive Hamiltonian must both be a quantum object")
             
         self.dim = self.hamiltonian.shape[0]
-        self.gamma_table = decoherence_rates
         self.omega = angular_frequency
         self.evals, self.evecs = self.hamiltonian.eigenstates()
        
-        self.jump_ops = self.jump_operators(self.gamma_table)
+        self.jump_ops = jump_operators
         # This initial steady-state is the thermal equilibrium state (bootstrapping)
         self.rho_s = qt.steadystate(self.hamiltonian, self.jump_ops)
         self.density_matrix = [[(self.evecs[a].dag() * self.rho_s * self.evecs[b])[0] for b in range(self.dim)] for a in range(self.dim)]
@@ -59,7 +58,12 @@ class DrivenOpenSystem:
         self.drive_term_list = []
         self.rotating_frame_hamiltonian = self.hamiltonian
 
-    
+    def __repr__(self):
+        title = '====Driven Open Quantum System==== \n'
+        formatted_evals = [ '%.1f' % elem for elem in self.__dict__['evals']]
+        properties = 'Eigenvalues: {} \n \nDrive Frequency: {}'.format(formatted_evals, self.__dict__['omega'])
+        return title + '\n' + properties
+
     def adaptive_rwa_solve(self, cutoff_matrix_element=0.0, it_max=10, neglected_term_info = False):
         """run steady-state master equation iteratively until the same terms in drive Hamiltonian are kept
            returns: steady-state density matrix; information on neglected terms and a measure of the deviation from
@@ -94,23 +98,6 @@ class DrivenOpenSystem:
             return self.rho_s, neglected_term_list, error_parameter
         else:
             return self.rho_s   
-
-    
-    def jump_operators(self, gamma_table):
-        """Sets up list of collapse operators for input into master equation
-           returns: list of Lindblad jump operators
-           @param gamma_table: (array or list of floats) table of decoherence rates between all eigenstates of system Hamiltonian
-        """
-        evecs = self.evecs
-        evals = self.evals
-       
-        L = []
-       
-        for k in range(self.dim):
-            for j in range(self.dim):
-                L.append(np.sqrt(abs(gamma_table[j][k])) * evecs[k] * evecs[j].dag())
-        
-        return L
 
     def determine_frame(self, cutoff_matrix_element):
         """Construct a rotating frame transformation with corresponding integers, Hamiltonian, and drive terms
@@ -219,7 +206,7 @@ class DrivenOpenSystem:
                     # find the graph components where these states have been placed
                     for k,graph in enumerate(graph_list):
                         overlap = list(set(index) & set(graph))
-                        # subscenario: the states are in the same graph component, hence a cycle so nothing can do
+                        # subscenario: the states are in the same graph component, hence a cycle, so nothing can do
                         if (len(overlap) == 2):
                             break
                         # subscenario: the states are in two disjoint graph components

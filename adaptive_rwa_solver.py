@@ -147,7 +147,7 @@ class DrivenOpenSystem(object):
 
         L0 = (qt.liouvillian(self.rotating_frame_hamiltonian, self.jump_ops))
         
-        relevance_table = [[self.calculate_first_order_correction(cutoff_matrix_element, n, m, L0) for m in range(self.dim)] for n in range(self.dim)]
+        relevance_table = [[self.calculate_first_order_correction(cutoff_matrix_element,L0,ket_index=n,bra_index=m) for m in range(self.dim)] for n in range(self.dim)]
         relevance_table = np.asarray(relevance_table)
         
         number_of_transitions = int(self.dim*(self.dim-1)/2)
@@ -238,26 +238,24 @@ class DrivenOpenSystem(object):
         ## END algorithm
         return transition_rank, integer_list
 
-    def calculate_first_order_correction(self, cutoff_matrix_element, n, m, L0):
+    def calculate_first_order_correction(self,cutoff_matrix_element,L0,**kwargs):
         """Calculates the first order correction to the steady-state density matrix due to drive term,
            and thereby calculating the corresponding relevance parameter
            returns: relevance parameter, Delta_{nm}
            @param cutoff_matrix_element: (float)
-           @param n,m: (int) the indices of the drive term
+           @param **kwargs: (dictionary) of relevant drive term indices, usually n labels ket, m for bra
            @param L0: (QObj) the Liouvillian superoperator L_0 needed to solve for the correction, independent of indices
                              so not needed to be re-evaluated every time this function is called
         """
-        if n >= m:
-            return 0.0
-
+        n = kwargs['ket_index']
+        m = kwargs['bra_index']
+        if n >= m: return 0.0
         evecs = self.evecs
         evals = self.evals
-
         # ignore drive terms whose matrix elements are beneath a specificied cutoff for speed-up. 
         v_nm = (evecs[n].dag()*(self.v*evecs[m]))[0][0][0]
-        if abs(v_nm)  <= cutoff_matrix_element:
-            return 0.0
-        
+        if abs(v_nm)  <= cutoff_matrix_element: return 0.0
+            
         k = self.integer_list
         rho_s_vectorform = np.reshape(self.density_matrix,(self.dim**2,1),order='F')
 
